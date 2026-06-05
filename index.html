@@ -1,0 +1,206 @@
+﻿<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>예상 소진일 계산기</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <section class="topbar">
+        <div>
+          <h1>예상 소진일 계산기</h1>
+          <p>판매량, 재고, 미입고, 미발수량 엑셀을 올리면 상품별 잔여 가능 수량과 소진 예정일을 계산합니다.</p>
+        </div>
+        <div class="actions">
+          <button id="sampleButton" type="button">샘플 데이터</button>
+          <button id="resetButton" type="button">초기화</button>
+        </div>
+      </section>
+
+      <section class="settings" aria-label="계산 설정">
+        <label>
+          판매량 기준 기간
+          <span class="inputWithUnit">
+            <input id="salesDays" type="number" min="1" value="30" />
+            <span>일</span>
+          </span>
+        </label>
+        <label>
+          기준일
+          <input id="baseDate" type="date" />
+        </label>
+        <label>
+          위험 기준
+          <span class="inputWithUnit">
+            <input id="warningDays" type="number" min="1" value="14" />
+            <span>일 이하</span>
+          </span>
+        </label>
+      </section>
+
+      <section class="naverFilters" aria-label="네이버 검색 조건">
+        <div>
+          <span>네이버 검색 조건</span>
+          <strong>카테고리 검색 전에 성별과 연령대를 미리 선택할 수 있습니다.</strong>
+        </div>
+        <label>
+          성별
+          <select id="trendGender">
+            <option value="">전체</option>
+            <option value="f">여성</option>
+            <option value="m">남성</option>
+          </select>
+        </label>
+        <label>
+          연령대
+          <select id="trendAge">
+            <option value="">전체</option>
+            <option value="1">0~12세</option>
+            <option value="2">13~18세</option>
+            <option value="3">19~24세</option>
+            <option value="4">25~29세</option>
+            <option value="5">30~34세</option>
+            <option value="6">35~39세</option>
+            <option value="7">40~44세</option>
+            <option value="8">45~49세</option>
+            <option value="9">50~54세</option>
+            <option value="10">55~59세</option>
+            <option value="11">60세 이상</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="uploadGrid" aria-label="엑셀 업로드">
+        <article class="uploadCard" data-kind="sales">
+          <div>
+            <h2>판매량</h2>
+            <p>상품코드, 상품명, 판매량</p>
+          </div>
+          <input id="salesFile" type="file" accept=".xlsx,.xls,.csv" />
+          <output id="salesStatus">대기 중</output>
+        </article>
+        <article class="uploadCard" data-kind="stock">
+          <div>
+            <h2>재고</h2>
+            <p>상품코드, 상품명, 재고수량</p>
+          </div>
+          <input id="stockFile" type="file" accept=".xlsx,.xls,.csv" />
+          <output id="stockStatus">대기 중</output>
+        </article>
+        <article class="uploadCard" data-kind="inbound">
+          <div>
+            <h2>미입고</h2>
+            <p>상품코드, 입고예정/미입고 수량</p>
+          </div>
+          <input id="inboundFile" type="file" accept=".xlsx,.xls,.csv" />
+          <output id="inboundStatus">대기 중</output>
+        </article>
+        <article class="uploadCard" data-kind="unshipped">
+          <div>
+            <h2>미발수량</h2>
+            <p>상품코드, 미발/미출고 수량</p>
+          </div>
+          <input id="unshippedFile" type="file" accept=".xlsx,.xls,.csv" />
+          <output id="unshippedStatus">대기 중</output>
+        </article>
+      </section>
+
+      <section class="summary" aria-label="요약">
+        <button class="summaryItem" type="button" data-status-filter="">
+          <span>분석 상품</span>
+          <strong id="totalItems">0</strong>
+        </button>
+        <button class="summaryItem" type="button" data-status-filter="risk">
+          <span>위험</span>
+          <strong id="riskItems">0</strong>
+        </button>
+        <button class="summaryItem" type="button" data-status-filter="watch">
+          <span>주의</span>
+          <strong id="watchItems">0</strong>
+        </button>
+        <button class="summaryItem" type="button" data-status-filter="">
+          <span>재고수</span>
+          <strong id="availableQty">0</strong>
+        </button>
+      </section>
+
+      <section class="tableTools" aria-label="결과 도구">
+        <div class="searchBox">
+          <input id="searchInput" type="search" placeholder="상품코드, 상품명 또는 카테고리 검색" />
+        </div>
+        <div class="toolButtons">
+          <button id="loadSalesStatusButton" type="button">판매상태 불러오기</button>
+          <button id="recommendReorderButton" type="button" disabled>리오더 추천</button>
+          <span id="applyRecommendationWrapper" class="tooltipTarget">
+            <button id="applyRecommendationButton" type="button" disabled>추천 수량 반영</button>
+          </span>
+          <button id="reorderExportButton" type="button" disabled>리오더 엑셀 다운로드</button>
+          <button id="exportButton" type="button" disabled>CSV 다운로드</button>
+        </div>
+      </section>
+      <p id="recommendMessage" class="recommendMessage"></p>
+
+      <section class="trendPanel" aria-label="네이버 검색추이">
+        <div class="trendHeader">
+          <div>
+            <span>네이버 검색추이</span>
+            <strong id="trendTitle">카테고리를 클릭해 주세요</strong>
+          </div>
+          <button id="trendCloseButton" type="button">닫기</button>
+        </div>
+        <div class="trendSubcategoryRow">
+          <label>
+            하위 카테고리
+            <select id="trendSubcategory" disabled>
+              <option value="">카테고리 클릭 후 선택</option>
+            </select>
+          </label>
+        </div>
+        <canvas id="trendChart" width="1080" height="280"></canvas>
+        <div id="trendStats" class="trendStats" hidden></div>
+        <div id="trendLegend" class="trendLegend" hidden></div>
+        <p id="trendMessage">결과표의 카테고리를 클릭하면 최근 1년 검색추이를 표시합니다.</p>
+      </section>
+
+      <section class="resultWrap" aria-label="계산 결과">
+        <table>
+          <thead>
+  <tr>
+    <th><button class="sortButton" type="button" data-sort="statusText">상태</button></th>
+    <th><button class="sortButton" type="button" data-sort="code">상품코드</button></th>
+    <th><button class="sortButton" type="button" data-sort="salesStatus">판매상태</button></th>
+    <th><button class="sortButton" type="button" data-sort="season">시즌</button></th>
+    <th><button class="sortButton" type="button" data-sort="color">컬러</button></th>
+    <th><button class="sortButton" type="button" data-sort="size">사이즈</button></th>
+    <th><button class="sortButton" type="button" data-sort="name">상품명</button></th>
+    <th><button class="sortButton" type="button" data-sort="category">카테고리</button></th>
+    <th><button class="sortButton" type="button" data-sort="recommendedReorder">추천 수량</button></th>
+    <th><button class="sortButton" type="button" data-sort="reorder">리오더 수량</button></th>
+    <th>비고</th>
+    <th><button class="sortButton" type="button" data-sort="sales">판매량</button></th>
+    <th><button class="sortButton" type="button" data-sort="dailySales">일평균 판매량</button></th>
+    <th><button class="sortButton" type="button" data-sort="stock">재고</button></th>
+    <th><button class="sortButton" type="button" data-sort="inbound">미입고</button></th>
+    <th><button class="sortButton" type="button" data-sort="unshipped">미발수량</button></th>
+    <th><button class="sortButton" type="button" data-sort="available">잔여 가능 수량</button></th>
+    <th><button class="sortButton" type="button" data-sort="days">소진까지</button></th>
+    <th><button class="sortButton" type="button" data-sort="stockoutTime">예상 소진일</button></th>
+  </tr>
+</thead>
+          <tbody id="resultBody">
+            <tr class="emptyRow">
+              <td colspan="19">엑셀 파일을 업로드하면 결과가 표시됩니다.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+      <div id="recommendTooltip" class="recommendTooltip" hidden></div>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
