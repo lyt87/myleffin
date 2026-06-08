@@ -127,6 +127,16 @@
           <strong id="availableQty">0</strong>
         </button>
       </section>
+      <section class="reorderSummary" aria-label="리오더 합계">
+        <article class="reorderSummaryItem">
+          <span>리오더 수량 합계</span>
+          <strong id="reorderTotalQty">0</strong>
+        </article>
+        <article class="reorderSummaryItem">
+          <span>리오더 금액 합계</span>
+          <strong id="reorderTotalAmount">0원</strong>
+        </article>
+      </section>
 
       <section class="tableTools" aria-label="결과 도구">
         <div class="searchBox">
@@ -178,8 +188,11 @@
     <th><button class="sortButton" type="button" data-sort="size">사이즈</button></th>
     <th><button class="sortButton" type="button" data-sort="name">상품명</button></th>
     <th><button class="sortButton" type="button" data-sort="category">카테고리</button></th>
+    <th><button class="sortButton" type="button" data-sort="costKrw">원가(원)</button></th>
+    <th><button class="sortButton" type="button" data-sort="costCny">원가(위안화)</button></th>
     <th><button class="sortButton" type="button" data-sort="recommendedReorder">추천 수량</button></th>
     <th><button class="sortButton" type="button" data-sort="reorder">리오더 수량</button></th>
+    <th><button class="sortButton" type="button" data-sort="reorderAmount">리오더 금액</button></th>
     <th>비고</th>
     <th><button class="sortButton" type="button" data-sort="sales">판매량</button></th>
     <th><button class="sortButton" type="button" data-sort="dailySales">일평균 판매량</button></th>
@@ -193,7 +206,7 @@
 </thead>
           <tbody id="resultBody">
             <tr class="emptyRow">
-              <td colspan="19">엑셀 파일을 업로드하면 결과가 표시됩니다.</td>
+              <td colspan="22">엑셀 파일을 업로드하면 결과가 표시됩니다.</td>
             </tr>
           </tbody>
         </table>

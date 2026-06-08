@@ -8,6 +8,8 @@
   notes: new Map(),
   salesStatuses: new Map(),
   seasons: new Map(),
+  costKrw: new Map(),
+  costCny: new Map(),
   results: [],
   sortKey: "days",
   sortDirection: "asc",
@@ -54,6 +56,8 @@ const elements = {
   riskItems: document.querySelector("#riskItems"),
   watchItems: document.querySelector("#watchItems"),
   availableQty: document.querySelector("#availableQty"),
+  reorderTotalQty: document.querySelector("#reorderTotalQty"),
+  reorderTotalAmount: document.querySelector("#reorderTotalAmount"),
 };
 
 const fileInputs = [
@@ -99,6 +103,10 @@ document.querySelector("#resetButton").addEventListener("click", () => {
   state.reorder.clear();
   state.recommendations.clear();
   state.notes.clear();
+  state.salesStatuses.clear();
+  state.seasons.clear();
+  state.costKrw.clear();
+  state.costCny.clear();
   state.results = [];
   fileInputs.forEach(([, input, status]) => {
     input.value = "";
@@ -175,7 +183,7 @@ elements.trendSubcategory.addEventListener("change", () => {
 });
 
 elements.exportButton.addEventListener("click", () => {
-  const header = ["상태", "상품코드", "판매상태", "시즌", "컬러", "사이즈", "상품명", "카테고리", "추천수량", "리오더수량", "비고", "판매량", "일평균판매량", "재고", "미입고", "미발수량", "잔여가능수량", "소진까지", "예상소진일"];
+  const header = ["상태", "상품코드", "판매상태", "시즌", "컬러", "사이즈", "상품명", "카테고리", "원가(원)", "원가(위안화)", "추천수량", "리오더수량", "리오더금액", "비고", "판매량", "일평균판매량", "재고", "미입고", "미발수량", "잔여가능수량", "소진까지", "예상소진일"];
   const lines = [header, ...state.results.map((row) => [
     row.statusText,
     row.code,
@@ -185,8 +193,11 @@ elements.exportButton.addEventListener("click", () => {
     row.size,
     row.name,
     row.category,
+    row.costKrw,
+    row.costCny,
     row.recommendedReorder,
     row.reorder,
+    formatReorderAmount(row),
     row.note,
     row.sales,
     row.dailySales,
@@ -219,7 +230,10 @@ elements.reorderExportButton.addEventListener("click", () => {
     사이즈: row.size,
     상품명: row.name,
     카테고리: row.category,
+    "원가(원)": row.costKrw,
+    "원가(위안화)": row.costCny,
     리오더수량: row.reorder,
+    리오더금액: formatReorderAmount(row),
     비고: row.note,
     판매량: row.sales,
     일평균판매량: round(row.dailySales, 2),
@@ -263,6 +277,8 @@ async function loadSalesStatuses() {
 
     state.salesStatuses = new Map(Object.entries(payload.statuses ?? {}));
     state.seasons = new Map(Object.entries(payload.seasons ?? {}));
+    state.costKrw = new Map(Object.entries(payload.costKrw ?? {}));
+    state.costCny = new Map(Object.entries(payload.costCny ?? {}));
     calculate();
     elements.recommendMessage.textContent = `${Number(payload.count || 0).toLocaleString("ko-KR")}개 상품의 판매상태를 불러왔습니다.`;
   } catch (error) {
@@ -501,6 +517,10 @@ function calculate() {
     const styleCode = baseStyleCode(code);
     const salesStatus = state.salesStatuses.get(code) ?? state.salesStatuses.get(styleCode) ?? "";
     const season = state.seasons.get(code) ?? state.seasons.get(styleCode) ?? "";
+    const costKrw = parseNumber(state.costKrw.get(code) ?? state.costKrw.get(styleCode));
+    const costCny = parseNumber(state.costCny.get(code) ?? state.costCny.get(styleCode));
+    const reorderAmount = reorder > 0 && costKrw > 0 ? reorder * costKrw : 0;
+    const reorderAmountCny = reorder > 0 && costCny > 0 ? reorder * costCny : 0;
     const available = stock + inbound + reorder - unshipped;
     const days = dailySales > 0 ? available / dailySales : Infinity;
     const name = pickDisplayName(code);
@@ -517,8 +537,12 @@ function calculate() {
       size: variant.size,
       name,
       category,
+      costKrw,
+      costCny,
       recommendedReorder,
       reorder,
+      reorderAmount,
+      reorderAmountCny,
       note,
       sales,
       dailySales,
@@ -560,6 +584,8 @@ function render() {
   elements.riskItems.textContent = state.results.filter((row) => row.status.className === "risk").length.toLocaleString("ko-KR");
   elements.watchItems.textContent = state.results.filter((row) => row.status.className === "watch").length.toLocaleString("ko-KR");
   elements.availableQty.textContent = state.results.reduce((sum, row) => sum + row.available, 0).toLocaleString("ko-KR");
+  elements.reorderTotalQty.textContent = state.results.reduce((sum, row) => sum + row.reorder, 0).toLocaleString("ko-KR");
+  elements.reorderTotalAmount.textContent = formatReorderTotalAmount();
   elements.exportButton.disabled = state.results.length === 0;
   elements.recommendReorderButton.disabled = !state.results.some((row) => ["risk", "watch"].includes(row.status.className) && row.dailySales > 0);
   elements.applyRecommendationButton.disabled = state.recommendations.size === 0;
@@ -570,7 +596,7 @@ function render() {
   updateSummaryFilters();
 
   if (sortedRows.length === 0) {
-    elements.resultBody.innerHTML = `<tr class="emptyRow"><td colspan="19">${state.results.length ? "검색 결과가 없습니다." : "엑셀 파일을 업로드하면 결과가 표시됩니다."}</td></tr>`;
+    elements.resultBody.innerHTML = `<tr class="emptyRow"><td colspan="22">${state.results.length ? "검색 결과가 없습니다." : "엑셀 파일을 업로드하면 결과가 표시됩니다."}</td></tr>`;
     return;
   }
 
@@ -584,11 +610,14 @@ function render() {
       <td>${escapeHtml(row.size)}</td>
       <td>${escapeHtml(row.name)}</td>
       <td><button class="categoryButton" type="button" data-category="${escapeHtml(row.category)}">${escapeHtml(row.category)}</button></td>
+      <td>${row.costKrw ? formatNumber(row.costKrw) : ""}</td>
+      <td>${row.costCny ? formatNumber(row.costCny, 2) : ""}</td>
       <td>
         <span class="recommendValue">${row.recommendedReorder ? formatNumber(row.recommendedReorder) : ""}</span>
         ${row.recommendedReorder ? `<button class="applyRowRecommendation" type="button" data-code="${escapeHtml(row.code)}">반영</button>` : ""}
       </td>
       <td><input class="reorderInput" type="number" min="0" step="1" inputmode="numeric" data-code="${escapeHtml(row.code)}" value="${row.reorder || ""}" aria-label="${escapeHtml(row.code)} 리오더 수량" /></td>
+      <td>${renderReorderAmount(row)}</td>
       <td><input class="noteInput" type="text" data-code="${escapeHtml(row.code)}" value="${escapeHtml(row.note)}" aria-label="${escapeHtml(row.code)} 비고" /></td>
       <td>${formatNumber(row.sales)}</td>
       <td>${formatNumber(row.dailySales, 2)}</td>
@@ -1017,7 +1046,7 @@ function sortValue(row, key) {
     return order[row.statusText] ?? 99;
   }
 
-  if (["sales", "dailySales", "stock", "inbound", "unshipped", "available", "days", "stockoutTime", "reorder", "recommendedReorder"].includes(key)) {
+  if (["costKrw", "costCny", "sales", "dailySales", "stock", "inbound", "unshipped", "available", "days", "stockoutTime", "reorder", "reorderAmount", "recommendedReorder"].includes(key)) {
     const value = Number(row[key]);
     return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
   }
@@ -1038,7 +1067,7 @@ function updateSortButtons() {
 }
 
 function defaultSortDirection(key) {
-  return ["sales", "dailySales", "stock", "inbound", "unshipped", "available", "reorder", "recommendedReorder"].includes(key) ? "desc" : "asc";
+  return ["costKrw", "costCny", "sales", "dailySales", "stock", "inbound", "unshipped", "available", "reorder", "reorderAmount", "recommendedReorder"].includes(key) ? "desc" : "asc";
 }
 
 function pickDisplayName(code) {
@@ -1121,6 +1150,33 @@ function formatNumber(value, digits = 0) {
   });
 }
 
+function formatReorderAmount(row) {
+  if (!row.reorderAmount && !row.reorderAmountCny) return "";
+
+  const krw = row.reorderAmount ? `${formatNumber(row.reorderAmount)}원` : "";
+  const cny = row.reorderAmountCny ? `${formatNumber(row.reorderAmountCny, 2)}위안` : "";
+
+  if (krw && cny) return `${krw} (${cny})`;
+  return krw || `(${cny})`;
+}
+
+function renderReorderAmount(row) {
+  if (!row.reorderAmount && !row.reorderAmountCny) return "";
+
+  const krw = row.reorderAmount ? `${formatNumber(row.reorderAmount)}원` : "";
+  const cny = row.reorderAmountCny ? `(${formatNumber(row.reorderAmountCny, 2)}위안)` : "";
+
+  return `<span class="reorderAmountText">${escapeHtml(krw)}${cny ? `<small>${escapeHtml(cny)}</small>` : ""}</span>`;
+}
+
+function formatReorderTotalAmount() {
+  const totalKrw = state.results.reduce((sum, row) => sum + row.reorderAmount, 0);
+  const totalCny = state.results.reduce((sum, row) => sum + row.reorderAmountCny, 0);
+  const krw = totalKrw ? `${formatNumber(totalKrw)}원` : "0원";
+  const cny = totalCny ? ` (${formatNumber(totalCny, 2)}위안)` : "";
+  return `${krw}${cny}`;
+}
+
 function round(value, digits = 0) {
   const factor = 10 ** digits;
   return Math.round(Number(value) * factor) / factor;
@@ -1165,7 +1221,7 @@ function addReorderWorkbookStyles(workbookArray) {
     ]).then(([stylesXml, sheetXml]) => {
       const styled = appendHighlightStyle(stylesXml);
       loadedZip.file("xl/styles.xml", styled.stylesXml);
-      loadedZip.file("xl/worksheets/sheet1.xml", applyColumnStyle(sheetXml, ["B", "I"], styled.styleIndex));
+      loadedZip.file("xl/worksheets/sheet1.xml", applyColumnStyle(sheetXml, ["B", "K"], styled.styleIndex));
       return loadedZip.generateAsync({ type: "blob" });
     }))
     .catch(() => new Blob([workbookArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));

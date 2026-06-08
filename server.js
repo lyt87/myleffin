@@ -195,6 +195,20 @@ async function fetchSalesStatuses() {
     "시즌",
     "season",
   ]);
+  const costKrwIndex = findColumnIndex(header, [
+    "원가(원)",
+    "원가원",
+    "원가",
+    "cost krw",
+    "krw cost",
+  ]);
+  const costCnyIndex = findColumnIndex(header, [
+    "원가(위안화)",
+    "원가위안화",
+    "위안화",
+    "cost cny",
+    "cny cost",
+  ]);
 
   if (codeIndex < 0 || statusIndex < 0) {
     throw new Error("Google Sheets에서 상품코드 또는 판매상태 열을 찾지 못했습니다.");
@@ -202,17 +216,23 @@ async function fetchSalesStatuses() {
 
   const statuses = {};
   const seasons = {};
+  const costKrw = {};
+  const costCny = {};
   rows.slice(headerRowIndex + 1).forEach((row) => {
     const code = cleanCode(row[codeIndex]);
     if (!code) return;
     statuses[code] = String(row[statusIndex] ?? "").trim();
     seasons[code] = seasonIndex >= 0 ? String(row[seasonIndex] ?? "").trim() : "";
+    costKrw[code] = costKrwIndex >= 0 ? parseSheetNumber(row[costKrwIndex]) : 0;
+    costCny[code] = costCnyIndex >= 0 ? parseSheetNumber(row[costCnyIndex]) : 0;
   });
 
   return {
     count: Object.keys(statuses).length,
     statuses,
     seasons,
+    costKrw,
+    costCny,
   };
 }
 
@@ -310,6 +330,11 @@ function compactHeader(value) {
 
 function cleanCode(value) {
   return String(value ?? "").trim().replace(/[\s-]/g, "").toUpperCase();
+}
+
+function parseSheetNumber(value) {
+  const number = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(number) ? number : 0;
 }
 
 function addDays(date, days) {
