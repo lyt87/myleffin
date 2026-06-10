@@ -399,6 +399,8 @@ function normalizeRows(rows, kind) {
 
   rows.forEach((rawRow) => {
     const row = normalizeKeys(rawRow);
+    if (isSummaryRow(row)) return;
+
     const directCode = cleanCode(pickValue(row, columnAliases.code));
     const code = directCode || composeCode(row);
     if (!code) return;
@@ -417,6 +419,21 @@ function normalizeRows(rows, kind) {
   });
 
   return result;
+}
+
+function isSummaryRow(row) {
+  const candidates = [
+    pickValue(row, columnAliases.code),
+    pickValue(row, columnAliases.name),
+    pickValue(row, columnAliases.style),
+    row.column_1,
+    row.column_2,
+  ];
+
+  return candidates.some((value) => {
+    const text = normalizeHeader(value);
+    return text === "합계" || text === "총계" || text === "total" || text === "grandtotal" || text.includes("합계") || text.includes("총계");
+  });
 }
 
 function rowsFromDetectedHeader(matrix) {
